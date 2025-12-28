@@ -261,27 +261,30 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	char params[512];
 	memset(params, 0, sizeof(params));
 
-	if (is_firopow) {
+	const bool need_mweb = coind->usemweb;
+	const bool need_segwit = (coind->usesegwit || coind->p2wpkh);
+
+	// Prefer per-coin rules when needed. Avoid forcing segwit/mweb on coins that don't support it.
+	if (need_mweb) {
+		strcpy(params, "[{\"rules\":[\"segwit\",\"mweb\"]}]");
+		if (coind->rpcdebug) debuglog("%s mweb enabled\n", coind->symbol);
+	}
+	else if (need_segwit) {
+		strcpy(params, "[{\"rules\":[\"segwit\"]}]");
+	}
+	else if (is_firopow) {
 		sprintf(params, "[{\"mode\":\"template\"},\"%s\"]", coind->wallet);
 	}
 	else if (is_kawpow || is_phihash || is_meowpow) {
-		sprintf(params, "[]");
+		strcpy(params, "[]");
 	}
 	else {
 		strcpy(params, "[{}]");
 	}
 
-	if(!strcmp(coind->symbol, "PPC")) strcpy(params, "[]");
-	else if(g_stratum_segwit) strcpy(params, "[{\"rules\":[\"segwit\"]}]");
-       
-	coind->usemweb |= g_stratum_mweb;
+	if(!strcmp(coind->symbol, "PPC") && !need_segwit && !need_mweb) strcpy(params, "[]");
 
-       if(coind->usemweb) 
-       {
-       strcpy(params, "[{\"rules\":[\"segwit\",\"mweb\"]}]");
-       debuglog("%s mweb enabled\n", coind->symbol);
-       } 
-
+	if (coind->rpcdebug) debuglog("%s getblocktemplate params %s\n", coind->symbol, params);
 
 	json_value *json = rpc_call(&coind->rpc, "getblocktemplate", params, coind);
 	if(!json || json_is_null(json))
